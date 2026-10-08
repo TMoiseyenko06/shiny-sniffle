@@ -40,6 +40,8 @@ from PIL import Image
 # block-sparse attention. Triton bundles a matching ptxas, so use that instead.
 for _var in ("TRITON_PTXAS_PATH", "TRITON_CUOBJDUMP_PATH", "TRITON_NVDISASM_PATH"):
     os.environ.pop(_var, None)
+# Video activations come in many sizes; expandable segments avoid OOMs from a fragmented cache.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 # Negative prompt used by the official LongCat-Video demos.
 DEFAULT_NEGATIVE_PROMPT = (
@@ -473,7 +475,9 @@ class LongCatBackend(VideoBackend):
         else:
             pipe.vae.to("cuda")
             if mode == "blocks":
-                reserve = float(self.settings.get("ACTIVATION_RESERVE_GB", "10")) * 2**30
+                encoder_bytes = sum(p.numel() * p.element_size() for p in text_encoder.parameters())
+                reserve = max(float(self.settings.get("ACTIVATION_RESERVE_GB", "10")) * 2**30,
+                              encoder_bytes + 2 * 2**30)   # the encoder visits the GPU for every prompt
                 self._offloader = _BlockOffloader(pipe.dit, "cuda", reserve)
                 pipe.vae.enable_tiling()
             else:
@@ -613,6 +617,8 @@ class LongCatBackend(VideoBackend):
                 else:
                     self._enable_lora("refinement_lora")
                     pipe.dit.enable_bsa()
+                    if self.memory_mode != "none":
+                        pipe.vae.enable_tiling()   # encoding/decoding ~190 frames at 720p is the memory peak
                     refine_steps = int(self.settings.get("REFINE_STEPS", "50"))
                     condition, num_cond, start = None, 1, 0
                     for segment in range(1, n + 1):
@@ -643,6 +649,9 @@ class LongCatBackend(VideoBackend):
                 pipe.dit.disable_all_loras()
             with contextlib.suppress(Exception):
                 pipe.dit.disable_bsa()
+            if self.memory_mode == "text_encoder":   # blocks mode keeps tiling on for everything
+                with contextlib.suppress(Exception):
+                    pipe.vae.disable_tiling()
             if self._offloader:
                 self._offloader.reset()
 
