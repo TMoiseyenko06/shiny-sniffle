@@ -295,11 +295,14 @@ class Worker:
         # outside the except block, so the traceback (and the GPU tensors it references) is gone
         if error is not None:
             self.store.update(job_id, status="failed", finished_at=time.time(), error=error)
-        self.backend.release_memory()
-        if fatal:
+        if fatal:   # decide before touching CUDA again: on a broken context even empty_cache() raises
             log.critical("Unrecoverable CUDA error; exiting so start.sh restarts the server.")
             logging.shutdown()
             os._exit(3)
+        try:
+            self.backend.release_memory()
+        except Exception:  # noqa: BLE001
+            log.exception("Freeing GPU memory failed")
 
 
 # ----- helpers -----------------------------------------------------------------------------------
@@ -355,7 +358,7 @@ def read_image(data: bytes):
     try:
         img = Image.open(io.BytesIO(data))
         fmt = img.format
-        if fmt not in ("JPEG", "PNG", "WEBP"):
+        if fmt not in ("JPEG", "MPO", "PNG", "WEBP"):   # MPO = JPEG with extra frames (iPhone portrait/HDR)
             bad_request(f"{fmt or 'This'} images are not supported. Use JPG, PNG or WebP.", 415)
         img.load()
     except HTTPException:
@@ -375,7 +378,7 @@ def read_image(data: bytes):
     rotated = rotated.convert("RGB")
     if min(rotated.size) < 128:
         bad_request(f"The image is only {rotated.width}×{rotated.height}. Use at least 128 px on the short side.")
-    return rotated, {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}[fmt], note
+    return rotated, {"JPEG": "jpg", "MPO": "jpg", "PNG": "png", "WEBP": "webp"}[fmt], note
 
 
 def save_inputs(job_id, data, resolution):

@@ -8,7 +8,7 @@ rented GPU (vast.ai). You open it in your phone's browser, upload a photo, and w
 ## Quick start on a fresh vast.ai instance
 
 Pick an instance with **≥ 48 GB VRAM** (A6000 / L40S / A100 / H100), **Max CUDA ≥ 12.4**, about
-**100 GB of disk** and **≥ 64 GB RAM**. In the instance's docker options, open the GUI port (`-p 8000:8000`).
+**150 GB of disk** (the weights alone are 83 GB) and **≥ 96 GB RAM**. In the instance's docker options, open the GUI port (`-p 8000:8000`).
 
 ```bash
 cd /workspace

@@ -65,12 +65,12 @@ echo "Needs roughly 12 GB for the Python environment plus the model weights (siz
 # ---------------------------------------------------------------------------------------------
 step "System packages"
 missing=""
-for cmd in git curl; do command -v "$cmd" >/dev/null || missing="$missing $cmd"; done
+for cmd in git curl gcc; do command -v "$cmd" >/dev/null || missing="$missing $cmd"; done
 if [ -n "$missing" ]; then
   SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
   $SUDO apt-get update -qq && $SUDO apt-get install -y -qq $missing
 fi
-echo "git and curl present"
+echo "git, curl and gcc present (gcc: triton compiles kernels for the 720p refine)"
 
 # ---------------------------------------------------------------------------------------------
 step "LongCat-Video code (github.com/meituan-longcat/LongCat-Video, $LONGCAT_REF)"
@@ -86,7 +86,8 @@ if ! command -v uv >/dev/null; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
 fi
-[ -x "$PY" ] || uv venv --python 3.10 --seed venv
+# uv-managed Python ships its C headers, which triton needs to compile kernels at run time
+[ -x "$PY" ] || uv venv --python-preference only-managed --python 3.10 --seed venv
 PIP=(uv pip install --python "$PY")
 "$PY" --version
 
@@ -137,6 +138,9 @@ grep -viE '^[[:space:]]*(torch|torchvision|torchaudio|flash[-_]attn)[[:space:]]*
   LongCat-Video/requirements.txt > "$REQS"
 "${PIP[@]}" -r "$REQS"
 rm -f "$REQS"
+
+"$PY" -c "import sysconfig, os, sys; h = os.path.join(sysconfig.get_paths()['include'], 'Python.h'); sys.exit(0 if os.path.exists(h) else 1)" \
+  || { SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"; $SUDO apt-get install -y -qq python3.10-dev; }
 
 step "GUI requirements"
 "${PIP[@]}" -r requirements-gui.txt

@@ -583,12 +583,13 @@ class LongCatBackend(VideoBackend):
                         video=current, prompt=prompt, negative_prompt=negative, resolution="480p",
                         num_frames=S, num_cond_frames=C, num_inference_steps=steps, use_distill=fast,
                         guidance_scale=guidance, generator=generator, use_kv_cache=True,
-                        offload_kv_cache=self.offload_kv_cache, enhance_hf=True)[0]
+                        offload_kv_cache=self.offload_kv_cache, enhance_hf=not fast)[0]   # upstream: not with use_distill
                     current = _to_frames(output, size)
                     del output
                     frames.extend(current[C:])
                     progress.finish_segment()
                 del current
+                pipe.kv_cache_dict = None   # generate_vc keeps the conditioning KV cache (GBs of VRAM) on the pipeline
                 if fast:
                     pipe.dit.disable_all_loras()
                 self.release_memory()
@@ -623,6 +624,7 @@ class LongCatBackend(VideoBackend):
         finally:
             self._step_hook = None
             self._prompt_cache.clear()
+            pipe.kv_cache_dict = None
             if writer is not None:
                 with contextlib.suppress(Exception):
                     writer.close()
