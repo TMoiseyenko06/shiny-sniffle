@@ -12,6 +12,8 @@ if [ -f server.pid ] && kill -0 "$(cat server.pid)" 2>/dev/null; then
 fi
 [ -x venv/bin/torchrun ] || { echo "venv missing: run ./setup.sh first" >&2; exit 1; }
 
+# use Triton's bundled ptxas, not a system CUDA it may not understand (see backend.py)
+unset TRITON_PTXAS_PATH TRITON_CUOBJDUMP_PATH TRITON_NVDISASM_PATH
 COMPILE=""
 [ "${ENABLE_COMPILE:-0}" = 1 ] && COMPILE="--enable_compile"
 

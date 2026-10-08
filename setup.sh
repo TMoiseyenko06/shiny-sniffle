@@ -142,6 +142,31 @@ rm -f "$REQS"
 "$PY" -c "import sysconfig, os, sys; h = os.path.join(sysconfig.get_paths()['include'], 'Python.h'); sys.exit(0 if os.path.exists(h) else 1)" \
   || { SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"; $SUDO apt-get install -y -qq python3.10-dev; }
 
+step "Triton / torch.compile check (the 720p refine compiles GPU kernels)"
+TRITON_TEST=$(mktemp --suffix=.py)   # triton.jit needs a real source file
+cat > "$TRITON_TEST" <<'EOF'
+import torch, triton, triton.language as tl
+
+@triton.jit
+def add_one(x_ptr, n, BLOCK: tl.constexpr):
+    offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    mask = offs < n
+    tl.store(x_ptr + offs, tl.load(x_ptr + offs, mask=mask) + 1, mask=mask)
+
+x = torch.zeros(1000, device="cuda")
+add_one[(4,)](x, 1000, BLOCK=256)
+assert float(x.sum()) == 1000
+f = torch.compile(lambda t: torch.nn.functional.gelu(t) * 2)
+f(torch.randn(64, device="cuda"))
+torch.cuda.synchronize()
+print("triton kernels and torch.compile work")
+EOF
+if ! env -u TRITON_PTXAS_PATH -u TRITON_CUOBJDUMP_PATH -u TRITON_NVDISASM_PATH "$PY" "$TRITON_TEST"; then
+  warn "Triton cannot compile kernels here, so 720p (refinement) jobs will fail; 480p still works."
+  warn "Paste the error above to get it fixed."
+fi
+rm -f "$TRITON_TEST"
+
 step "GUI requirements"
 "${PIP[@]}" -r requirements-gui.txt
 

@@ -34,6 +34,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+# Some CUDA base images (vast.ai PyTorch templates, NGC containers) point Triton at the system
+# CUDA's ptxas. The Triton that ships with our torch cannot parse newer CUDA releases ("Triton only
+# support CUDA 10.0 or higher, but got CUDA version: 13.1"), which breaks the 720p refine's
+# block-sparse attention. Triton bundles a matching ptxas, so use that instead.
+for _var in ("TRITON_PTXAS_PATH", "TRITON_CUOBJDUMP_PATH", "TRITON_NVDISASM_PATH"):
+    os.environ.pop(_var, None)
+
 # Negative prompt used by the official LongCat-Video demos.
 DEFAULT_NEGATIVE_PROMPT = (
     "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, "
@@ -406,7 +413,11 @@ class LongCatBackend(VideoBackend):
             if not required.exists():
                 raise GenerationError(f"{required} is missing. Run ./setup.sh first.")
         import torch
+        import torch._dynamo
         import torch.distributed as dist
+        # upstream decorates block-sparse-attention helpers with @torch.compile; if compiling ever
+        # fails on this machine, run them eagerly instead of failing the job
+        torch._dynamo.config.suppress_errors = True
         if not torch.cuda.is_available():
             raise GenerationError("PyTorch cannot see a CUDA GPU. Check nvidia-smi and the torch install.")
         if str(self.repo_dir) not in sys.path:
