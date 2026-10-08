@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>LongCat Video</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css?v=__V__">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand"><img src="/static/icon.svg" alt="" width="26" height="26"> LongCat <span>Video</span></div>
+      <button type="button" class="btn ghost small" id="logout">Log out</button>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="status-model" id="status-model">Connecting…</span>
+      <span class="status-gpu" id="status-gpu"></span>
+    </div>
+    <p class="status-detail" id="status-detail" hidden></p>
+  </header>
+
+  <main class="layout">
+    <section class="card create" aria-labelledby="create-title">
+      <h2 id="create-title">New video</h2>
+      <form id="create" novalidate>
+        <label class="picker" id="picker" for="image">
+          <input type="file" id="image" accept="image/*" class="visually-hidden">
+          <span class="picker-empty" id="picker-empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
+            <strong>Choose a photo</strong>
+            <span>Photo library or camera · JPG, PNG, WebP · up to 25 MB</span>
+          </span>
+          <img id="preview" alt="Selected photo" hidden>
+          <span class="picker-change" id="picker-change" hidden>Change</span>
+        </label>
+        <p class="hint" id="image-meta"></p>
+
+        <div class="field">
+          <label class="lbl" for="prompt">Prompt</label>
+          <textarea id="prompt" rows="4" maxlength="2000" placeholder="Describe the motion: what happens, how the camera moves, the mood…"></textarea>
+        </div>
+
+        <details class="advanced" id="advanced">
+          <summary><span>Advanced</span><span class="sum-meta" id="adv-summary"></span></summary>
+          <div class="adv-body">
+            <div class="field">
+              <span class="lbl" id="mode-label">Mode</span>
+              <div class="segmented" role="radiogroup" aria-labelledby="mode-label">
+                <input type="radio" name="mode" id="mode-fast" value="fast" checked><label for="mode-fast">Fast</label>
+                <input type="radio" name="mode" id="mode-quality" value="quality"><label for="mode-quality">Quality</label>
+              </div>
+              <p class="hint" id="mode-hint"></p>
+            </div>
+
+            <div class="field">
+              <div class="lbl-row"><label class="lbl" for="duration">Duration</label><output id="duration-out" for="duration">10 s</output></div>
+              <input type="range" id="duration" min="5" max="60" step="1" value="10">
+              <p class="hint" id="duration-hint"></p>
+            </div>
+
+            <div class="field two">
+              <div class="field-col">
+                <label class="lbl" for="resolution">Resolution</label>
+                <select id="resolution"></select>
+              </div>
+              <div class="field-col">
+                <label class="lbl" for="steps">Steps</label>
+                <input type="number" id="steps" inputmode="numeric" min="4" max="100" step="1">
+              </div>
+            </div>
+            <p class="hint" id="resolution-hint"></p>
+
+            <div class="field">
+              <label class="lbl" for="seed">Seed</label>
+              <div class="seed-row">
+                <input type="text" id="seed" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="Random" autocomplete="off" disabled>
+                <label class="switch"><input type="checkbox" id="seed-random" checked><span class="track" aria-hidden="true"></span><span>Random</span></label>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="lbl" for="negative">Negative prompt</label>
+              <textarea id="negative" rows="3" maxlength="2000"></textarea>
+              <div class="row-end"><button type="button" class="btn ghost small" id="negative-reset">Reset to default</button></div>
+            </div>
+          </div>
+        </details>
+
+        <button type="submit" class="btn primary big" id="submit">Generate</button>
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section class="jobs" aria-labelledby="jobs-title">
+      <div class="section-head">
+        <h2 id="jobs-title">Queue &amp; results</h2>
+        <span class="muted" id="jobs-count"></span>
+      </div>
+      <div class="job-list" id="jobs"></div>
+      <div class="empty" id="jobs-empty" hidden>
+        <p><strong>No videos yet.</strong></p>
+        <p>Pick a photo, describe the motion and press Generate. Jobs run one at a time on the GPU and keep running if you close this page.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <template id="job-template">
+    <article class="job">
+      <div class="job-top">
+        <img class="thumb" alt="" loading="lazy">
+        <div class="job-info">
+          <p class="job-prompt"></p>
+          <p class="job-meta"></p>
+        </div>
+        <span class="badge"></span>
+      </div>
+      <div class="job-progress">
+        <div class="bar"><span></span></div>
+        <div class="progress-text"><span class="progress-label"></span><span class="elapsed"></span></div>
+      </div>
+      <video class="job-video" playsinline controls preload="metadata"></video>
+      <p class="job-error"></p>
+      <p class="job-note"></p>
+      <div class="job-actions"></div>
+    </article>
+  </template>
+
+  <script src="/static/app.js?v=__V__"></script>
+</body>
+</html>

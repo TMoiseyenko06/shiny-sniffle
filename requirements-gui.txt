@@ -1,0 +1,8 @@
+# Web GUI dependencies (installed on top of LongCat-Video's requirements.txt by setup.sh).
+fastapi==0.115.12
+uvicorn==0.34.2
+python-multipart==0.0.20
+itsdangerous==2.2.0
+pillow
+numpy
+imageio-ffmpeg
